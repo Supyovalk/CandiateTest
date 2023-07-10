@@ -44,11 +44,11 @@ public class Server extends AbstractVerticle {
     }
     //Both have to be non negative due to the method the value were assaigned
     int highdiff = highstring.compareTo(str), lowdiff = str.compareTo(lowstring);
-    //SOMEHOW we found a word of either type
+    //SOMEHOW we didn't found a word of either type
     if(!highflag&&!lowflag){
       return "";
     }
-    //There's A Lowstring AND either there's not a Highstring or it's futher away then the low one
+    //There's A Lowstring AND either there's not a Highstring or it's futher away then the low one (or equal distance since Bias towards low lexic value)
     if(lowflag&&(!highflag||(highflag&&(highdiff >= lowdiff)))){
       return lowstring;
     }
