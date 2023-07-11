@@ -6,6 +6,11 @@
 //Send Post Request from CMD:
 //curl http://localhost:8080/analyze -d {\"text\":\"word\"}
 package test.project1;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.util.ArrayList;
 import io.vertx.core.*;
 import io.vertx.core.http.*;
@@ -16,7 +21,7 @@ import io.vertx.ext.web.handler.BodyHandler;
 public class Server extends AbstractVerticle {
   private Router router;
   private HttpServer server;
-  private ArrayList<String> requestwordList;
+  private ArrayList<String> requestwordList; //Theorically Possible with Treeset But both soultions are O(N)
   private String returncloestlexic(String str, ArrayList<String> lst) {
     if (lst.isEmpty()) {
       return "";
@@ -44,11 +49,11 @@ public class Server extends AbstractVerticle {
     }
     //Both have to be non negative due to the method the value were assaigned
     int highdiff = highstring.compareTo(str), lowdiff = str.compareTo(lowstring);
-    //SOMEHOW we didn't found a word of either type
+    //SOMEHOW we found a word of either type
     if(!highflag&&!lowflag){
       return "";
     }
-    //There's A Lowstring AND either there's not a Highstring or it's futher away then the low one (or equal distance since Bias towards low lexic value)
+    //There's A Lowstring AND either there's not a Highstring or it's futher away then the low one
     if(lowflag&&(!highflag||(highflag&&(highdiff >= lowdiff)))){
       return lowstring;
     }
@@ -109,7 +114,18 @@ public class Server extends AbstractVerticle {
 
   @Override
   public void start(Promise<Void> start) throws Exception {
-    requestwordList = new ArrayList<String>();
+    File f = new File("wordlst.dat");
+    if(!f.exists()|| f.length()==0){
+      f.createNewFile();
+      requestwordList = new ArrayList<String>();
+    }
+    else{
+      FileInputStream fis = new FileInputStream("wordlst.dat");
+      ObjectInputStream ois = new ObjectInputStream(fis);
+      requestwordList = (ArrayList<String>)ois.readObject();
+      ois.close();
+      fis.close();
+    }
     router          = Router.router(vertx);
     router.route("/").handler(context -> {
       HttpServerResponse response = context.response();
@@ -125,15 +141,24 @@ public class Server extends AbstractVerticle {
         io.vertx.core.json.JsonObject jsonobj = new JsonObject();
         jsonobj.put("value", returnclosestsum(text, requestwordList));
         jsonobj.put("lexical", returncloestlexic(text, requestwordList));
+        //Naive and synchronous, But it's currently the only reasonable soultion to protect stream's crtical section (Future Variables can't prevent, there's no atomic strings/streams and databases are too heavy for the task)
+        synchronized(this){
         if (!requestwordList.contains(text)) {
           requestwordList.add(text);
         }
-        System.out.println("Word");
+        FileOutputStream fos = new FileOutputStream("wordlst.dat");
+        ObjectOutputStream oos = new ObjectOutputStream(fos);
+        oos.writeObject(requestwordList);
+        oos.close();
+        fos.close();
+        }
+        System.out.println("Word Processed:"+text+",Total words:"+requestwordList.size());
         rc.response()
             .setStatusCode(200)
             .end(jsonobj.toBuffer());
 
       } catch (Exception e) {
+        System.out.println("Error has occured while processing word");
         rc.response()
             .setStatusCode(500 )
             .end(e.getMessage());
