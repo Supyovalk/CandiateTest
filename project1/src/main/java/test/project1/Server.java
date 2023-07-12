@@ -12,93 +12,19 @@ import java.io.FileOutputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.TreeSet;
 import io.vertx.core.*;
 import io.vertx.core.http.*;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.*;
 import io.vertx.ext.web.handler.BodyHandler;
-
-public class Server extends AbstractVerticle {
-  private Router router;
-  private HttpServer server;
-  private ArrayList<String> requestwordList; //Theorically Possible with Treeset But both soultions are O(N)
-  private String returncloestlexic(String str, ArrayList<String> lst) {
-    if (lst.isEmpty()) {
-      return "";
-    }
-    if (lst.contains(str)) {
-      return str;
-    }
-    boolean lowflag    = false;
-    boolean highflag   = false;
-    String  lowstring  = "";
-    String  highstring = "";
-    for (int i = 0; i < lst.size(); i++) {
-      String s = lst.get(i);
-      if (s.compareTo(str) < 0) {
-        if (!lowflag || lowstring.compareTo(s) < 0) {
-          lowstring = s;
-          lowflag = true;
-        }
-      } else {
-        if (!highflag || highstring.compareTo(s) > 0) {
-          highstring = s;
-          highflag = true;
-        }
-      }
-    }
-    //Both have to be non negative due to the method the value were assaigned
-    int highdiff = highstring.compareTo(str), lowdiff = str.compareTo(lowstring);
-    //SOMEHOW we found a word of either type
-    if(!highflag&&!lowflag){
-      return "";
-    }
-    //There's A Lowstring AND either there's not a Highstring or it's futher away then the low one
-    if(lowflag&&(!highflag||(highflag&&(highdiff >= lowdiff)))){
-      return lowstring;
-    }
-    //Everything else
-    return highstring;
-  }
-
-  private String returnclosestsum(String str, ArrayList<String> lst) {
-    if (lst.isEmpty()) {
-      return "";
-    }
-    int    lowidx    = -1,    highidx = -1;
-    String lowstring = "",    highstring = "";
-    int    lowvalue  = -1000, highvalue = 1000;
-    int    strvalue  = calcuatelettersum(str);
-    for (int i = 0; i < lst.size(); i++) {
-      String s = lst.get(i);
-      int lettersum = calcuatelettersum(s);
-      if (lettersum <= strvalue) {
-        //Low Words needs to have higher Sum Value to be better candiates
-        if (lowidx == -1 || lettersum > lowvalue || (lettersum == lowvalue && s.compareTo(lowstring) > 0)) { 
-          lowidx = i;
-          lowvalue = lettersum;
-          lowstring = s;
-        }
-      }
-      if (lettersum >= strvalue) {
-        //High Words needs to have lower Sum Value to be better candiates
-        if (highidx == -1 || lettersum < highvalue || (lettersum == highvalue && s.compareTo(highstring) > 0)) { // No
-          highidx = i;
-          highvalue = lettersum;
-          highstring = s;
-        }
-      }
-    }
-    if (highidx == -1) {
-      return lowidx == -1 ? "" : lowstring;
-    } else {
-      //Bias Towards The "High" Words, therefore >= and not just >
-      return lowidx == -1 || strvalue - lowvalue >= highvalue - strvalue ? highstring : lowstring;
-    }
-  }
-
-  private int calcuatelettersum(String str) {
+class CharValueComparator implements Comparator<String> {
+    public static int calcuatelettersum(String str) {
     int sum = 0;
+    if(str==null){
+      return 0;
+    }
     for (char ch : str.toCharArray()) {
       int charvalue = (int) ch;
       if (charvalue > 64 && charvalue < 91) {
@@ -110,23 +36,116 @@ public class Server extends AbstractVerticle {
       }
     }
     return sum;
+    }
+    // Method
+    // To compare two strings
+    public int compare(String str1, String str2)
+    {
+      int charDiff= calcuatelettersum(str1)-calcuatelettersum(str2);
+      if(charDiff!=0){
+        return charDiff;
+      }
+      else{
+        return str1.compareTo(str2);
+      }
+    }
+}
+public class Server extends AbstractVerticle {
+  private Router router;
+  private HttpServer server;
+  private TreeSet<String> requestWordList; //Theorically Possible with Treeset But both soultions are O(N)
+  private String returnClosestLexic(String searchWord, TreeSet<String> treeSetWords) {
+    if(treeSetWords.size()==0){
+      return "";
+    }
+    if(treeSetWords.contains(searchWord)){
+      return searchWord;
+    }
+    if(searchWord.compareTo(treeSetWords.first())<0){
+      return treeSetWords.first();
+    }
+    if(searchWord.compareTo(treeSetWords.last())>0){
+      return treeSetWords.last();
+    }
+    String lowerString   = treeSetWords.lower(searchWord);
+    String higherString  = treeSetWords.higher(searchWord);
+    //Bias Towards Lower String
+    return searchWord.compareTo(lowerString)<=higherString.compareTo(searchWord)?lowerString:higherString;
   }
+  //Function to simplity to search of the most high lexical word
+  private static String searchLexicalHighestEqualValue(String startCandiate, TreeSet<String> stringList){
+    System.out.println("Starting Searching For Candiates for "+startCandiate);
+    String StringCandidate     = startCandiate;
+    String StringNext          = stringList.higher(StringCandidate);
+    int    startCanidateValue  = CharValueComparator.calcuatelettersum(StringCandidate);
+    int    StringNextCharValue = CharValueComparator.calcuatelettersum(StringNext);
+    while(StringNext!=null&&StringNextCharValue==startCanidateValue){
+      StringCandidate     = StringNext;
+      StringNext          = stringList.higher(StringCandidate);
+      StringNextCharValue = CharValueComparator.calcuatelettersum(StringNext);
+      System.out.println("Checking "+StringCandidate);
+    }
+    System.out.println("Getting "+StringCandidate);
+    return StringCandidate;
+  }
+
+  private static String returnClosestValue(String searchWord, TreeSet<String> treeSetWords) {
+    if(treeSetWords.size()==0){
+      return "";
+    }
+    if(treeSetWords.size()==1){
+      return treeSetWords.first();
+    }
+    TreeSet<String> treeSetValue=new TreeSet<String>(new CharValueComparator());
+    treeSetValue.addAll(treeSetWords);
+    if(treeSetValue.contains(searchWord)){
+      return searchWord;
+    }
+    String highestValueString = treeSetValue.last();
+    String lowestValueString  = treeSetValue.first();
+    int highestCharValue      = CharValueComparator.calcuatelettersum(highestValueString);
+    int lowestCharValue       = CharValueComparator.calcuatelettersum(lowestValueString);
+    int searchWordValue       = CharValueComparator.calcuatelettersum(searchWord);
+    //All words on the list are either low or equal canidates, therefor forcing the lexical highest of the equal, being the last string in the treeset
+    if(highestCharValue<=searchWordValue){
+      return highestValueString;
+    }
+    //All words on the list are either high or equal canidates, therefor forcing the lexical highest of the equal, which requires checking all words with the lowest Valuestring for the lexical highest of them
+    if(lowestCharValue>=searchWordValue){
+      return searchLexicalHighestEqualValue(lowestValueString,treeSetValue);
+    }
+    String closestStringLow  = treeSetValue.lower(searchWord);
+    String closestStringHigh = treeSetValue.higher(searchWord);
+    System.out.println("ValueLimit Strings:"+closestStringLow+","+closestStringHigh);
+    int charValueClosestLow  = CharValueComparator.calcuatelettersum( closestStringLow);
+    int charValueClosestHigh = CharValueComparator.calcuatelettersum( closestStringHigh);
+    //If Low are closer, pick the Lexical highest with the equal value to closestStringLow, that being himself (Since otherwise it wouldn't be the closest)
+    if(charValueClosestHigh-searchWordValue>searchWordValue-charValueClosestLow){
+      System.out.println("Low Chsoen");
+      return searchLexicalHighestEqualValue(closestStringLow,treeSetValue);
+    }
+    else{
+      System.out.println("High Chsoen");
+      return searchLexicalHighestEqualValue(closestStringHigh,treeSetValue);
+    }
+  }
+
 
   @Override
   public void start(Promise<Void> start) throws Exception {
-    File f = new File("wordlst.dat");
-    if(!f.exists()|| f.length()==0){
-      f.createNewFile();
-      requestwordList = new ArrayList<String>();
+    File dataFile = new File("wordlst.dat");
+    if(!dataFile.exists()|| dataFile.length()==0){
+      dataFile.createNewFile();
+      requestWordList = new TreeSet<String>();
     }
     else{
-      FileInputStream fis = new FileInputStream("wordlst.dat");
+      FileInputStream fis   = new FileInputStream("wordlst.dat");
       ObjectInputStream ois = new ObjectInputStream(fis);
-      requestwordList = (ArrayList<String>)ois.readObject();
+      requestWordList = (TreeSet<String>)ois.readObject();
       ois.close();
       fis.close();
     }
-    router          = Router.router(vertx);
+    router = Router.router(vertx);
     router.route("/").handler(context -> {
       HttpServerResponse response = context.response();
       response.putHeader("content-type", "text/html")
@@ -136,32 +155,42 @@ public class Server extends AbstractVerticle {
     router.post("/analyze").handler(rc -> {
       try {
         rc.response().setChunked(true);
-        io.vertx.core.json.JsonObject jsonrequest = rc.body().asJsonObject();
-        String text = jsonrequest.getString("text");
-        io.vertx.core.json.JsonObject jsonobj = new JsonObject();
-        jsonobj.put("value", returnclosestsum(text, requestwordList));
-        jsonobj.put("lexical", returncloestlexic(text, requestwordList));
+        io.vertx.core.json.JsonObject jsonRequest  = rc.body().asJsonObject();
+        io.vertx.core.json.JsonObject jsonResponse = new JsonObject();
+        String text = jsonRequest.getString("text");
+        if(!(text.matches("[a-zA-Z]+"))){
+          System.out.println("Error has occured while processing word");
+          rc.response()
+          .setStatusCode(422 )
+          .end("ERROR:Cannot Process Non-Alphabetic Word Response (Neither Spaces Can Be Processed)");
+          return;
+        }
+        String valueStr,lexicalStr;
         //Naive and synchronous, But it's currently the only reasonable soultion to protect stream's crtical section (Future Variables can't prevent, there's no atomic strings/streams and databases are too heavy for the task)
         synchronized(this){
-        if (!requestwordList.contains(text)) {
-          requestwordList.add(text);
+        valueStr   = returnClosestValue(text, requestWordList);
+        lexicalStr = returnClosestLexic(text, requestWordList);
+        if (requestWordList.add(text)) {
+          System.out.println("Added new word");
         }
-        FileOutputStream fos = new FileOutputStream("wordlst.dat");
-        ObjectOutputStream oos = new ObjectOutputStream(fos);
-        oos.writeObject(requestwordList);
-        oos.close();
-        fos.close();
+        FileOutputStream fileOutStream = new FileOutputStream("wordlst.dat");
+        ObjectOutputStream objectOutStream = new ObjectOutputStream(fileOutStream);
+        objectOutStream.writeObject(requestWordList);
+        objectOutStream.close();
+        fileOutStream.close();
         }
-        System.out.println("Word Processed:"+text+",Total words:"+requestwordList.size());
+        jsonResponse.put("value", valueStr);
+        jsonResponse.put("lexical", lexicalStr);
+        System.out.println("Word Processed:"+text+",Total words:"+requestWordList.size());
         rc.response()
             .setStatusCode(200)
-            .end(jsonobj.toBuffer());
+            .end(jsonResponse.toBuffer());
 
       } catch (Exception e) {
         System.out.println("Error has occured while processing word");
         rc.response()
-            .setStatusCode(500 )
-            .end(e.getMessage());
+          .setStatusCode(500)
+          .end(e.getMessage());
       }
     });
     vertx.createHttpServer().requestHandler(router)
