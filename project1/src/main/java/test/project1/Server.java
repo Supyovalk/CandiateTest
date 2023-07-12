@@ -25,13 +25,13 @@ class CharValueComparator implements Comparator<String> {
     if(str==null){
       return 0;
     }
-    for (char ch : str.toCharArray()) {
-      int charvalue = (int) ch;
-      if (charvalue > 64 && charvalue < 91) {
-        sum += charvalue - 64;
+    for (char strChar : str.toCharArray()) {
+      int charValue = (int) strChar;
+      if (charValue > 64 && charValue < 91) {
+        sum += charValue - 64;
       } else {
-        if (charvalue > 96 && charvalue < 123) {
-          sum += charvalue - 96;
+        if (charValue > 96 && charValue < 123) {
+          sum += charValue - 96;
         }
       }
     }
@@ -139,11 +139,11 @@ public class Server extends AbstractVerticle {
       requestWordList = new TreeSet<String>();
     }
     else{
-      FileInputStream fis   = new FileInputStream("wordlst.dat");
-      ObjectInputStream ois = new ObjectInputStream(fis);
-      requestWordList = (TreeSet<String>)ois.readObject();
-      ois.close();
-      fis.close();
+      FileInputStream fileInStream   = new FileInputStream("wordlst.dat");
+      ObjectInputStream ObjectInStream = new ObjectInputStream(fileInStream);
+      requestWordList = (TreeSet<String>)ObjectInStream.readObject();
+      ObjectInStream.close();
+      fileInStream.close();
     }
     router = Router.router(vertx);
     router.route("/").handler(context -> {
